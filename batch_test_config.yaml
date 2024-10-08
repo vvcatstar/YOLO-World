@@ -1,0 +1,25 @@
+fishing:
+  positive_path: '/mnt/fillipo/yaowei/tower/benchmark/夜间非法垂钓监控/正样本-500'
+  negative_path: '/mnt/fillipo/yaowei/tower/benchmark/夜间非法垂钓监控/负样本-500'
+  prompt: 'fishing rod.person.lake.'
+  ext: 'jpg'
+boat:
+  positive_path: '/mnt/fillipo/yaowei/tower/benchmark/非机动船只非法捕捞预警（光电式）/非机动船只非法捕捞预警（光电式）/正样本-1500'
+  negative_path: '/mnt/fillipo/yaowei/tower/benchmark/非机动船只非法捕捞预警（光电式）/非机动船只非法捕捞预警（光电式）/负样本-1500'
+  prompt: 'human.water.wave.'
+  ext: 'jpg'
+smoke:
+  positive_path: '/mnt/fillipo/yaowei/tower/benchmark/散煤冒黑烟（只洗负样本）-286+200-李成浩/正样本-278'
+  negative_path: '/mnt/fillipo/yaowei/tower/benchmark/散煤冒黑烟（只洗负样本）-286+200-李成浩/负样本-200'
+  prompt: 'blacksmoke.building.sky.forest.mountain.fire'
+  ext: 'jpg'
+fire:
+  data_path: '/mnt/fillipo/yaowei/tower/benchmark/fire/positive'
+  output_path: '/mnt/fillipo/yaowei/tower/benchmark/yolo_test/1008/fire'
+  prompt: 'smoke.fire.chimneys.electricity tower.person.flatlands.buildings.forest.mountain'
+  ext: 'jpg'
+traffic:
+  positive_path: '/data/tower_data/benchmark/traffic/positive'
+  negative_path: '/data/tower_data/benchmark/traffic/negative'
+  prompt: 'Vehicles.Roads.Mudflows.Landslide.Rockfalls.'
+  ext: 'png'
