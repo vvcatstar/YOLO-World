@@ -20,6 +20,7 @@ from mmengine.config import Config
 from mmengine.dataset import Compose
 from mmdet.apis import init_detector
 from mmdet.utils import get_test_pipeline_cfg
+from flask import Flask, request, jsonify
 CUSTOM_COLOR_MAP = [
     "#e6194b",
     "#3cb44b",
@@ -141,17 +142,38 @@ def process_task(model, tasks_config):
     data_path = tasks_config['data_path']
     test_images = glob.glob(os.path.join(data_path, f'*.{ext}'))
     prompt = tasks_config['prompt']
-    tqbar = tqdm.tqdm(iterable=len(test_images), desc=f'Run in {task}-{data_path} images')
+    tqbar = tqdm.tqdm(iterable=len(test_images), desc=f'Run in {data_path} images')
     for image in test_images:
         model.process_image(image, prompt, tasks_config['output_path'], show_result=True)
         tqbar.update(1)
+        
+        
+yolo_config_file = './yolo_server_config.yaml'
+yolo_det = YOLO_WORLD(yolo_config_file)
+with open('./batch_test_config.yaml', 'r') as f:
+    configs = yaml.load(f, Loader=yaml.Loader)
+app = Flask(__name__)
+@app.route('/yolo_detection', methods=['POST'])
+def yolo_detection():
+    data = request.get_json()
+    image_path = data['image_path']
+    task = data['task']
+    output_root = os.path.dirname(image_path)
+    output_root = data.get('output_root', output_root)
+    text_prompt = data.get('text_prompt', configs['tasks'][task]['prompt'])
+    yolo_det.process_image(image_path, text_prompt, output_root, show_result=True)
+    response = {}
+    response['output_path'] = output_root
+    return jsonify(response)
 
-if __name__ == "__main__":
-    with open('./batch_test_config.yaml', 'r') as f:
-        configs = yaml.load(f, Loader=yaml.Loader)
-    yolo_config_file = './yolo_server_config.yaml'
-    task = 'fire'
-    task_config = configs[task]
-    yolo_det = YOLO_WORLD(yolo_config_file)
-    process_task(yolo_det, task_config)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
+# if __name__ == "__main__":
+#     with open('./batch_test_config.yaml', 'r') as f:
+#         configs = yaml.load(f, Loader=yaml.Loader)
+#     yolo_config_file = './yolo_server_config.yaml'
+#     task = 'fire'
+#     task_config = configs[task]
+#     yolo_det = YOLO_WORLD(yolo_config_file)
+#     process_task(yolo_det, task_config)
   
