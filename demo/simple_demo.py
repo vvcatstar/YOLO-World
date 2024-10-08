@@ -7,7 +7,8 @@ from mmengine.config import Config
 from mmengine.dataset import Compose
 from mmdet.apis import init_detector
 from mmdet.utils import get_test_pipeline_cfg
-
+import sys
+sys.path.append('./yolo_world')
 
 def inference(model, image, texts, test_pipeline, score_thr=0.3, max_dets=100):
     image = cv2.imread(image)
