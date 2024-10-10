@@ -105,7 +105,7 @@ class YOLO_WORLD:
         }
         with open(output_result, 'w') as f:
             json.dump(outputs, f)
-        return 
+        return output_result
     
     def inference(self, model, image, texts, test_pipeline, score_thr=0.2, max_dets=100):
         image = cv2.imread(image)
