@@ -65,7 +65,7 @@ class YOLO_WORLD:
                                                labels=labels)
         cv2.imwrite(output_image, annotated_frame)
         
-    def process_image(self, image_path, text_str, output_path, show_result=False):
+    def process_image(self, image_path, text_str, output_path, score_thr=0.05, show_result=False):
         image_name = image_path.split('/')[-1].split('.')[0]
         output_root = os.path.join(output_path, image_name)
         os.makedirs(output_root, exist_ok=True)
@@ -75,7 +75,7 @@ class YOLO_WORLD:
         for prompt in prompts:
             text.append([prompt])
         text.append([' '])
-        results = self.inference(self.model, image_path, text, self.test_pipeline)
+        results = self.inference(self.model, image_path, text, self.test_pipeline, score_thr=score_thr)
         input_boxes = results[0]
         class_ids = results[1]
         class_names = results[2]
@@ -105,9 +105,9 @@ class YOLO_WORLD:
         }
         with open(output_result, 'w') as f:
             json.dump(outputs, f)
-        return output_result
+        return output_result, outputs
     
-    def inference(self, model, image, texts, test_pipeline, score_thr=0.2, max_dets=100):
+    def inference(self, model, image, texts, test_pipeline, score_thr=0.05, max_dets=100):
         image = cv2.imread(image)
         image = image[:, :, [2, 1, 0]]
         data_info = dict(img=image, img_id=0, texts=texts)
@@ -160,10 +160,12 @@ def yolo_detection():
     task = data['task']
     output_root = os.path.dirname(image_path)
     output_root = data.get('output_root', output_root)
-    text_prompt = data.get('text_prompt', configs['tasks'][task]['prompt'])
-    yolo_det.process_image(image_path, text_prompt, output_root, show_result=True)
+    text_prompt = data.get('text_prompt', configs[task]['prompt'])
+    score_thr = float(data.get('score_thr', 0.05))
+    output_file, outputs = yolo_det.process_image(image_path, text_prompt, output_root, score_thr=score_thr,show_result=True)
     response = {}
-    response['output_path'] = output_root
+    response['output_file'] = output_file
+    response['outputs'] = outputs
     return jsonify(response)
 
 if __name__ == '__main__':
