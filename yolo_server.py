@@ -65,9 +65,9 @@ class YOLO_WORLD:
                                                labels=labels)
         cv2.imwrite(output_image, annotated_frame)
         
-    def process_image(self, image_path, text_str, output_path, score_thr=0.05, show_result=False):
+    def process_image(self, image_path, text_str, output_root, score_thr=0.05, show_result=False):
         image_name = image_path.split('/')[-1].split('.')[0]
-        output_root = os.path.join(output_path, image_name)
+        # output_root = os.path.join(output_path, image_name)
         os.makedirs(output_root, exist_ok=True)
         output_result = os.path.join(output_root, image_name+'_yolo_detection.json')
         text = []
@@ -95,7 +95,7 @@ class YOLO_WORLD:
         )
         # detections = detections.with_nms(threshold=0.5, class_agnostic=True)
         if show_result:
-            output_image = os.path.join(output_root, image_name+'_yolo.jpg')
+            output_image = os.path.join(output_root, image_name+'_yolo.png')
             self.show_bbox(image_path, detections, labels, output_image)
         outputs = {
             'image_path': image_path,
@@ -128,6 +128,7 @@ class YOLO_WORLD:
         boxes = pred_instances['bboxes']
         labels = pred_instances['labels']
         scores = pred_instances['scores']
+        # print(boxes)
         label_texts = [texts[x][0] for x in labels]
         return boxes, labels, label_texts, scores
 
@@ -162,6 +163,7 @@ def yolo_detection():
     output_root = data.get('output_root', output_root)
     text_prompt = data.get('text_prompt', configs[task]['prompt'])
     score_thr = float(data.get('score_thr', 0.05))
+    
     output_file, outputs = yolo_det.process_image(image_path, text_prompt, output_root, score_thr=score_thr,show_result=True)
     response = {}
     response['output_file'] = output_file
