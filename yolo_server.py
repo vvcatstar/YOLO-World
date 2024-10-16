@@ -16,6 +16,7 @@ import supervision as sv
 from supervision.draw.color import ColorPalette
 import tqdm
 import random
+import time
 from mmengine.config import Config
 from mmengine.dataset import Compose
 from mmdet.apis import init_detector
@@ -55,14 +56,15 @@ class YOLO_WORLD:
         self.test_pipeline = Compose(self.test_pipeline_cfg)
         # use show bbox result for debug
         self.label_annotator = sv.LabelAnnotator(color=ColorPalette.from_hex(CUSTOM_COLOR_MAP))
-        self.box_annotator = sv.BoxAnnotator(color=ColorPalette.from_hex(CUSTOM_COLOR_MAP))
+        self.box_annotator = sv.BoundingBoxAnnotator(color=ColorPalette.from_hex(CUSTOM_COLOR_MAP))
         
     def show_bbox(self, image_path, detections, labels, output_image):
         img = cv2.imread(image_path)
         annotated_frame = self.box_annotator.annotate(scene=img.copy(), detections=detections)
-        annotated_frame = self.label_annotator.annotate(scene=annotated_frame,
-                                               detections=detections,
-                                               labels=labels)
+        annotated_frame = self.label_annotator.annotate(
+            scene=annotated_frame,
+            detections=detections,
+            labels=labels)
         cv2.imwrite(output_image, annotated_frame)
         
     def process_image(self, image_path, text_str, output_root, score_thr=0.05, show_result=False):
@@ -92,8 +94,16 @@ class YOLO_WORLD:
             xyxy=input_boxes,
             class_id=class_ids,
             confidence=np.array(confidences),
-        )
-        # detections = detections.with_nms(threshold=0.5, class_agnostic=True)
+        )  
+        detections = detections.with_nms(threshold=0.5, class_agnostic=True)
+        class_ids = detections.class_id
+        confidences = detections.confidence
+        class_names = [text[i][0] for i in class_ids]
+        labels = [
+            f"{class_name} {confidence:.2f}"
+            for class_name, confidence
+            in zip(class_names, confidences)
+        ]
         if show_result:
             output_image = os.path.join(output_root, image_name+'_yolo.png')
             self.show_bbox(image_path, detections, labels, output_image)
@@ -128,7 +138,6 @@ class YOLO_WORLD:
         boxes = pred_instances['bboxes']
         labels = pred_instances['labels']
         scores = pred_instances['scores']
-        # print(boxes)
         label_texts = [texts[x][0] for x in labels]
         return boxes, labels, label_texts, scores
 
@@ -148,7 +157,6 @@ def process_task(model, tasks_config):
         model.process_image(image, prompt, tasks_config['output_path'], show_result=True)
         tqbar.update(1)
         
-        
 yolo_config_file = './yolo_server_config.yaml'
 yolo_det = YOLO_WORLD(yolo_config_file)
 with open('./batch_test_config.yaml', 'r') as f:
@@ -156,18 +164,21 @@ with open('./batch_test_config.yaml', 'r') as f:
 app = Flask(__name__)
 @app.route('/yolo_detection', methods=['POST'])
 def yolo_detection():
+    start_time = time.time()
     data = request.get_json()
     image_path = data['image_path']
     task = data['task']
     output_root = os.path.dirname(image_path)
     output_root = data.get('output_root', output_root)
-    text_prompt = data.get('text_prompt', configs[task]['prompt'])
+    text_prompt = data.get('text_prompt', '.')
     score_thr = float(data.get('score_thr', 0.05))
-    
     output_file, outputs = yolo_det.process_image(image_path, text_prompt, output_root, score_thr=score_thr,show_result=True)
     response = {}
     response['output_file'] = output_file
     response['outputs'] = outputs
+    end_time = time.time()
+    use_time = round(end_time - start_time, 3)
+    print(use_time)
     return jsonify(response)
 
 if __name__ == '__main__':
@@ -179,5 +190,9 @@ if __name__ == '__main__':
 #     task = 'fire'
 #     task_config = configs[task]
 #     yolo_det = YOLO_WORLD(yolo_config_file)
-#     process_task(yolo_det, task_config)
+#     # process_task(yolo_det, task_config)
+#     image_path = '/mnt/fillipo/yaowei/tower/benchmark/fire/bad_case/202401013860970496.jpg'
+#     output_root = '/mnt/fillipo/yaowei/tower/test_output/bad_case/202401013860970496'
+#     text_prompt = 'smoke.fire.chimneys.person.farmland.factory.building.forest.mountain.'
+#     output_file, outputs = yolo_det.process_image(image_path, text_prompt, output_root, score_thr=0.07,show_result=True)
   
