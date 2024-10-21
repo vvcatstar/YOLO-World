@@ -11,7 +11,7 @@ import numpy as np
 import supervision as sv
 import sys 
 from PIL import Image
-
+from ultralytics import YOLO
 import supervision as sv
 from supervision.draw.color import ColorPalette
 import tqdm
@@ -51,6 +51,7 @@ class YOLO_WORLD:
         self.cfg.load_from = self.checkpoint
         # self.model and self.test_pipeline use to process image
         self.model = init_detector(self.cfg, checkpoint=self.checkpoint, device='cuda:0')
+        self.cls_model = YOLO("/home/zyw/data/china_tower/CV_server/YOLO-World/runs/classify/train4/weights/best.pt")
         self.test_pipeline_cfg = get_test_pipeline_cfg(cfg=self.cfg)
         self.test_pipeline_cfg[0].type = 'mmdet.LoadImageFromNDArray'
         self.test_pipeline = Compose(self.test_pipeline_cfg)
@@ -67,6 +68,23 @@ class YOLO_WORLD:
             labels=labels)
         cv2.imwrite(output_image, annotated_frame)
         
+    def yolo_cls_filter(self, image_path, results):
+        image = cv2.imread(image_path)
+        input_boxes = results[0]
+        class_ids = results[1]
+        class_names = results[2]
+        confidences = results[3]
+        for index in range(len(results[0])):
+            if class_names[index] in ['smoke', 'boat']:
+                bbox = input_boxes[index]
+                x_min, y_min, x_max, y_max = map(int, bbox)
+                cropped_image = image[y_min:y_max, x_min:x_max]
+                cls_result = self.yolo_cls_filter(cropped_image)
+                
+            
+        return 
+        
+        
     def process_image(self, image_path, text_str, output_root, score_thr=0.05, show_result=False):
         image_name = image_path.split('/')[-1].split('.')[0]
         # output_root = os.path.join(output_path, image_name)
@@ -78,11 +96,12 @@ class YOLO_WORLD:
             text.append([prompt])
         text.append([' '])
         results = self.inference(self.model, image_path, text, self.test_pipeline, score_thr=score_thr)
+        # results = self.yolo_cls_filter(image_path, results)
         input_boxes = results[0]
         class_ids = results[1]
         class_names = results[2]
         confidences = results[3]
-    
+        
         class_names_len = len(class_names)
         class_names = [c.lower() for c in class_names]
         labels = [
