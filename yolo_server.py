@@ -22,6 +22,7 @@ from mmengine.dataset import Compose
 from mmdet.apis import init_detector
 from mmdet.utils import get_test_pipeline_cfg
 from flask import Flask, request, jsonify
+from IPython import embed 
 CUSTOM_COLOR_MAP = [
     "#e6194b",
     "#3cb44b",
@@ -51,7 +52,8 @@ class YOLO_WORLD:
         self.cfg.load_from = self.checkpoint
         # self.model and self.test_pipeline use to process image
         self.model = init_detector(self.cfg, checkpoint=self.checkpoint, device='cuda:0')
-        self.cls_model = YOLO("/home/zyw/data/china_tower/CV_server/YOLO-World/runs/classify/train4/weights/best.pt")
+        self.smoke_model = YOLO("/home/zyw/data/china_tower/CV_server/YOLO-World/runs/classify/smoke/weights/best.pt")
+        self.boat_model = YOLO("/home/zyw/data/china_tower/CV_server/YOLO-World/runs/classify/train18/weights/best.pt")
         self.test_pipeline_cfg = get_test_pipeline_cfg(cfg=self.cfg)
         self.test_pipeline_cfg[0].type = 'mmdet.LoadImageFromNDArray'
         self.test_pipeline = Compose(self.test_pipeline_cfg)
@@ -68,35 +70,127 @@ class YOLO_WORLD:
             labels=labels)
         cv2.imwrite(output_image, annotated_frame)
         
-    def yolo_cls_filter(self, image_path, results):
+    def get_croped_person(self, image_path, results, text):
         image = cv2.imread(image_path)
         input_boxes = results[0]
         class_ids = results[1]
         class_names = results[2]
         confidences = results[3]
+        person_details = []
+        
         for index in range(len(results[0])):
-            if class_names[index] in ['smoke', 'boat']:
+            if class_names[index] in ['rowboat', 'raft']:
                 bbox = input_boxes[index]
                 x_min, y_min, x_max, y_max = map(int, bbox)
                 cropped_image = image[y_min:y_max, x_min:x_max]
-                cls_result = self.yolo_cls_filter(cropped_image)
+                # cls_result = self.boat_model(cropped_image)[0]
+                # cls_name = cls_result.names[cls_result.probs.top1]
+                # if [cls_name] not in text:
+                #     text.append([cls_name])
+                # class_id = text.index([cls_name])
+                # class_ids[index] = class_id 
+                # print(f'{class_names[index]}->{cls_name}')
+                # class_names[index] = cls_name
+                # confidences[index] = float(cls_result.probs.top1conf.detach().cpu())
+                # if cls_name == 'rowboat':
+                    # detect person 
+                person_result = self.inference(self.model, cropped_image, [['person'], [' ']], self.test_pipeline, score_thr=0.1)
+                for j in range(len(person_result[0])):
+                    person_result[0][j][0] += x_min
+                    person_result[0][j][1] += y_min
+                    person_result[0][j][2] += x_min
+                    person_result[0][j][3] += y_min
+                person_details.append(person_result)
+        if ['person'] not in text and len(person_details):
+            text.append(['person'])
+        for i, sublist in enumerate(text):
+            if 'person' in sublist:
+                person_index = i
+        for person_info in person_details:
+            if person_info[0].shape[0]:
+                input_boxes = np.concatenate([input_boxes, person_info[0]], axis=0)
+                for j in range(len(person_info[2])): 
+                    class_ids = np.append(class_ids, person_index)
+                confidences = np.concatenate([confidences, person_info[3]], axis=0)
+                class_names.extend(person_info[2])
+        return [input_boxes, class_ids, class_names, confidences], text
+        
+    def yolo_cls_filter(self, image_path, results, text):
+        image = cv2.imread(image_path)
+        input_boxes = results[0]
+        class_ids = results[1]
+        class_names = results[2]
+        confidences = results[3]
+        person_details = []
+        for index in range(len(results[0])):
+            if class_names[index] in ['billowing black smoke', 'smoke']:
+                bbox = input_boxes[index]
+                x_min, y_min, x_max, y_max = map(int, bbox)
+                cropped_image = image[y_min:y_max, x_min:x_max]
+                cls_result = self.smoke_model(cropped_image)[0]
+                cls_name = cls_result.names[cls_result.probs.top1]
+                class_id = class_ids[index]
+                if [cls_name] not in text:
+                    text.append([cls_name])
+                class_id = text.index([cls_name])
+                class_ids[index] = class_id 
+                print(f'{class_names[index]}->{cls_name}')
+                class_names[index] = cls_name
+                confidences[index] = float(cls_result.probs.top1conf.detach().cpu())
                 
-            
-        return 
+        #     if class_names[index] in ['boat']:
+        #         bbox = input_boxes[index]
+        #         x_min, y_min, x_max, y_max = map(int, bbox)
+        #         cropped_image = image[y_min:y_max, x_min:x_max]
+        #         cls_result = self.boat_model(cropped_image)[0]
+        #         cls_name = cls_result.names[cls_result.probs.top1]
+        #         if [cls_name] not in text:
+        #             text.append([cls_name])
+        #         class_id = text.index([cls_name])
+        #         class_ids[index] = class_id 
+        #         print(f'{class_names[index]}->{cls_name}')
+        #         class_names[index] = cls_name
+        #         confidences[index] = float(cls_result.probs.top1conf.detach().cpu())
+        #         if cls_name == 'rowboat':
+        #             # detect person 
+        #             person_result = self.inference(self.model, cropped_image, [['person'], [' ']], self.test_pipeline, score_thr=0.1)
+        #             for j in range(len(person_result[0])):
+        #                 person_result[0][j][0] += x_min
+        #                 person_result[0][j][1] += y_min
+        #                 person_result[0][j][2] += x_min
+        #                 person_result[0][j][3] += y_min
+
+        #             person_details.append(person_result)
+        # if ['person'] not in text and len(person_details):
+        #     text.append(['person'])
+        # for i, sublist in enumerate(text):
+        #     if 'person' in sublist:
+        #         person_index = i
+        # for person_info in person_details:
+        #     if person_info[0].shape[0]:
+        #         input_boxes = np.concatenate([input_boxes, person_info[0]], axis=0)
+        #         for j in range(len(person_info[2])): 
+        #             class_ids = np.append(class_ids, person_index)
+        #         confidences = np.concatenate([confidences, person_info[3]], axis=0)
+        #         class_names.extend(person_info[2])
+        return [input_boxes, class_ids, class_names, confidences], text
         
         
-    def process_image(self, image_path, text_str, output_root, score_thr=0.05, show_result=False):
+    def process_image(self, image_path, text_str, output_root, task, score_thr=0.05, show_result=False):
         image_name = image_path.split('/')[-1].split('.')[0]
         # output_root = os.path.join(output_path, image_name)
         os.makedirs(output_root, exist_ok=True)
         output_result = os.path.join(output_root, image_name+'_yolo_detection.json')
         text = []
         prompts = text_str.split('.')
-        for prompt in prompts:
+        for prompt in prompts[:-1]:
             text.append([prompt])
         text.append([' '])
         results = self.inference(self.model, image_path, text, self.test_pipeline, score_thr=score_thr)
-        # results = self.yolo_cls_filter(image_path, results)
+        # if task in ['black_smoke']:
+        #     results, text = self.yolo_cls_filter(image_path, results, text)
+        # if task in ['boat']:
+        #     results, text = self.get_croped_person(image_path, results, text)
         input_boxes = results[0]
         class_ids = results[1]
         class_names = results[2]
@@ -109,12 +203,21 @@ class YOLO_WORLD:
             for class_name, confidence
             in zip(class_names, confidences)
         ]
+        score_threshold = 0.3
         detections = sv.Detections(
             xyxy=input_boxes,
             class_id=class_ids,
             confidence=np.array(confidences),
         )  
+        # filtered_detections = sv.Detections(
+        #     xyxy=detections.xyxy[detections.confidence > score_threshold],
+        #     confidence=detections.confidence[detections.confidence > score_threshold],
+        #     class_id=detections.class_id[detections.confidence > score_threshold]
+        # )
+        # detections = filtered_detections
         detections = detections.with_nms(threshold=0.5, class_agnostic=True)
+            # results, text = self.yolo_cls_filter(image_path, results, text)
+        
         class_ids = detections.class_id
         confidences = detections.confidence
         class_names = [text[i][0] for i in class_ids]
@@ -123,21 +226,22 @@ class YOLO_WORLD:
             for class_name, confidence
             in zip(class_names, confidences)
         ]
-        if show_result:
-            output_image = os.path.join(output_root, image_name+'_yolo.png')
-            self.show_bbox(image_path, detections, labels, output_image)
+        # if show_result:
+        #     output_image = os.path.join(output_root, image_name+'_yolo.png')
+        #     self.show_bbox(image_path, detections, labels, output_image)
         outputs = {
             'image_path': image_path,
             'xyxy': detections.xyxy.tolist(),
             'confidence': detections.confidence.tolist(),
             'class_name': class_names,
         }
-        with open(output_result, 'w') as f:
-            json.dump(outputs, f)
+        # with open(output_result, 'w') as f:
+        #     json.dump(outputs, f)
         return output_result, outputs
     
     def inference(self, model, image, texts, test_pipeline, score_thr=0.05, max_dets=100):
-        image = cv2.imread(image)
+        if type(image) == str:
+            image = cv2.imread(image)
         image = image[:, :, [2, 1, 0]]
         data_info = dict(img=image, img_id=0, texts=texts)
         data_info = test_pipeline(data_info)
@@ -191,7 +295,7 @@ def yolo_detection():
     output_root = data.get('output_root', output_root)
     text_prompt = data.get('text_prompt', '.')
     score_thr = float(data.get('score_thr', 0.05))
-    output_file, outputs = yolo_det.process_image(image_path, text_prompt, output_root, score_thr=score_thr,show_result=True)
+    output_file, outputs = yolo_det.process_image(image_path, text_prompt, output_root, task=task,score_thr=score_thr, show_result=True)
     response = {}
     response['output_file'] = output_file
     response['outputs'] = outputs
