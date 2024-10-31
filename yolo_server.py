@@ -52,8 +52,8 @@ class YOLO_WORLD:
         self.cfg.load_from = self.checkpoint
         # self.model and self.test_pipeline use to process image
         self.model = init_detector(self.cfg, checkpoint=self.checkpoint, device='cuda:0')
-        self.smoke_model = YOLO("/home/zyw/data/china_tower/CV_server/YOLO-World/runs/classify/smoke/weights/best.pt")
-        self.boat_model = YOLO("/home/zyw/data/china_tower/CV_server/YOLO-World/runs/classify/train18/weights/best.pt")
+        # self.smoke_model = YOLO("/home/zyw/data/china_tower/CV_server/YOLO-World/runs/classify/smoke/weights/best.pt")
+        # self.boat_model = YOLO("/home/zyw/data/china_tower/CV_server/YOLO-World/runs/classify/train18/weights/best.pt")
         self.test_pipeline_cfg = get_test_pipeline_cfg(cfg=self.cfg)
         self.test_pipeline_cfg[0].type = 'mmdet.LoadImageFromNDArray'
         self.test_pipeline = Compose(self.test_pipeline_cfg)
