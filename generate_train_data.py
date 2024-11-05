@@ -3,12 +3,17 @@ import os
 import glob 
 import cv2 
 from PIL import Image
-output_root = '/mnt/fillipo/yaowei/tower/annotation_data/train_data/yolo_11/cls'
+output_root = '/mnt/fillipo/yaowei/tower/annotation_data/train_data/yolo_11/fire'
 data_root = {
-    'billowing': '/mnt/fillipo/yaowei/tower/annotation_data/crop_label/billowing smoke/billowing smoke/good',
-    'white smoke': '/mnt/fillipo/yaowei/tower/annotation_data/crop_label/white smoke/white smoke/good',
-    'fishingboat' : '/mnt/fillipo/yaowei/tower/annotation_data/crop_label/fishingboat/fishingboat/good',
-    'rowboat': '/mnt/fillipo/yaowei/tower/annotation_data/crop_label/rowboat/rowboat/good'
+    # 'billowing': '/mnt/fillipo/yaowei/tower/annotation_data/crop_label/billowing smoke',
+    # 'white smoke': '/mnt/fillipo/yaowei/tower/annotation_data/crop_label/white smoke',
+    # 'fire': '/mnt/fillipo/yaowei/tower/annotation_data/crop_label/fire',
+    # 'tree': '/mnt/fillipo/yaowei/tower/annotation_data/crop_label/forest/',
+    # 'fishingboat' : '/mnt/fillipo/yaowei/tower/annotation_data/crop_label/fishingboat',
+    # 'rowboat': '/mnt/fillipo/yaowei/tower/annotation_data/crop_label/rowboat',
+    # 'buoy': '/mnt/fillipo/yaowei/tower/annotation_data/crop_label/buoy',
+    'chimney': '/mnt/fillipo/yaowei/tower/annotation_data/crop_label/chimney',
+    'electricity tower':'/mnt/fillipo/yaowei/tower/annotation_data/crop_label/electricity tower',
 }
 
 test_per = 0.2

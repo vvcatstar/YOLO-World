@@ -23,6 +23,7 @@ from mmdet.apis import init_detector
 from mmdet.utils import get_test_pipeline_cfg
 from flask import Flask, request, jsonify
 from IPython import embed 
+from post_process import PostProcess
 CUSTOM_COLOR_MAP = [
     "#e6194b",
     "#3cb44b",
@@ -45,8 +46,11 @@ class YOLO_WORLD:
     def __init__(self, config_file):
         with open(config_file, 'r') as f:
             self.configs = yaml.load(f, Loader=yaml.Loader)
+        with open('/home/zyw/data/china_tower/CV_server/config.yaml','r') as f:
+            self.post_config = yaml.load(f, Loader=yaml.Loader)
         self.config_file = self.configs['config_file']
         self.checkpoint = self.configs['checkpoint']
+        self.post_processer = PostProcess(self.post_config)
         self.cfg = Config.fromfile(self.config_file)
         self.cfg.work_dir = osp.join('./work_dirs')
         self.cfg.load_from = self.checkpoint
@@ -296,6 +300,10 @@ def yolo_detection():
     text_prompt = data.get('text_prompt', '.')
     score_thr = float(data.get('score_thr', 0.05))
     output_file, outputs = yolo_det.process_image(image_path, text_prompt, output_root, task=task,score_thr=score_thr, show_result=True)
+    outputs, annote_image = yolo_det.post_processer.post_task(task, outputs)
+    with open(output_file, 'w') as f:
+        json.dump(outputs, f)
+    cv2.imwrite(output_file.replace('.json', '.png'), annote_image)
     response = {}
     response['output_file'] = output_file
     response['outputs'] = outputs
