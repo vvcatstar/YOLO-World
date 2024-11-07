@@ -286,8 +286,8 @@ def process_task(model, tasks_config):
         
 yolo_config_file = './yolo_server_config.yaml'
 yolo_det = YOLO_WORLD(yolo_config_file)
-with open('./batch_test_config.yaml', 'r') as f:
-    configs = yaml.load(f, Loader=yaml.Loader)
+# with open('./batch_test_config.yaml', 'r') as f:
+#     configs = yaml.load(f, Loader=yaml.Loader)
 app = Flask(__name__)
 @app.route('/yolo_detection', methods=['POST'])
 def yolo_detection():
@@ -303,7 +303,7 @@ def yolo_detection():
     outputs, annote_image = yolo_det.post_processer.post_task(task, outputs)
     with open(output_file, 'w') as f:
         json.dump(outputs, f)
-    cv2.imwrite(output_file.replace('.json', '.png'), annote_image)
+    cv2.imwrite(output_file.replace('.json', '.jpg'), annote_image)
     response = {}
     response['output_file'] = output_file
     response['outputs'] = outputs

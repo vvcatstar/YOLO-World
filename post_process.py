@@ -12,6 +12,8 @@ from supervision.draw.color import ColorPalette
 from flask import Flask, request, jsonify
 from ultralytics import YOLO
 import supervision as sv
+from IPython import embed
+
 CUSTOM_COLOR_MAP = [
     "#e6194b",
     "#3cb44b",
@@ -32,9 +34,10 @@ CUSTOM_COLOR_MAP = [
 ]
 class PostProcess:
     def __init__(self, config):
-        self.smoke_cls = YOLO("/home/zyw/data/china_tower/CV_server/YOLO-World/runs/classify/smoke/weights/best.pt")
-        self.chimney_cls = YOLO('/home/zyw/data/china_tower/CV_server/YOLO-World/runs/classify/chimney/weights/best.pt')
-        self.person_det = YOLO("yolov8s-world.pt")
+        self.smoke_cls = YOLO(config['post_config']['smoke_cls'])
+        # self.chimney_cls = YOLO('/home/zyw/data/china_tower/CV_server/YOLO-World/runs/classify/chimney/weights/best.pt')
+        self.fire_env_model = YOLO(config['post_config']['fire_det'])
+        self.person_det = YOLO(config['post_config']['person_det'])
         self.person_det.set_classes(["person"])
         self.config = config 
         self.post_func = {
@@ -74,10 +77,10 @@ class PostProcess:
                 x_min, y_min, x_max, y_max = map(int, bbox)
                 width = x_max - x_min
                 height = y_max - y_min
-                new_x_min = max(x_min - width // 2, 0)
-                new_y_min = max(y_min - height // 2, 0)
-                new_x_max = min(x_max + width // 2, image.shape[1])
-                new_y_max = min(y_max + height // 2, image.shape[0])
+                new_x_min = max(x_min - width*2 , 0)
+                new_y_min = max(y_min - height*2 , 0)
+                new_x_max = min(x_max + width*2 , image.shape[1])
+                new_y_max = min(y_max + height*2 , image.shape[0])
                 cropped_image = image[new_y_min:new_y_max, new_x_min:new_x_max]
                 # cropped_image = image[y_min:y_max, x_min:x_max]
                 person_result = self.person_det(cropped_image)[0]
@@ -110,22 +113,37 @@ class PostProcess:
                 class_names[index] = cls_name
                 confidences[index] = float(cls_result.probs.top1conf.detach().cpu())
         return results
+    # def post_fire(self, results):
+    #     image = cv2.imread(results['image_path'])
+    #     input_boxes = results['xyxy']
+    #     class_names = results['class_name']
+    #     confidences = results['confidence']
+    #     for index in range(len(input_boxes)):
+    #         if class_names[index] in ['electricity tower', 'chimney']:
+    #             bbox = input_boxes[index]
+    #             x_min, y_min, x_max, y_max = map(int, bbox)
+    #             cropped_image = image[y_min:y_max, x_min:x_max]
+    #             cls_result = self.chimney_cls(cropped_image)[0]
+    #             cls_name = cls_result.names[cls_result.probs.top1]
+    #             print(f'{class_names[index]}->{cls_name}')
+    #             class_names[index] = cls_name
+    #             confidences[index] = float(cls_result.probs.top1conf.detach().cpu())
+    #     return results
+    
     def post_fire(self, results):
-        image = cv2.imread(results['image_path'])
-        input_boxes = results['xyxy']
-        class_names = results['class_name']
-        confidences = results['confidence']
-        for index in range(len(input_boxes)):
-            if class_names[index] in ['electricity tower', 'chimney']:
-                bbox = input_boxes[index]
-                x_min, y_min, x_max, y_max = map(int, bbox)
-                cropped_image = image[y_min:y_max, x_min:x_max]
-                cls_result = self.chimney_cls(cropped_image)[0]
-                cls_name = cls_result.names[cls_result.probs.top1]
-                print(f'{class_names[index]}->{cls_name}')
-                class_names[index] = cls_name
-                confidences[index] = float(cls_result.probs.top1conf.detach().cpu())
-        return results
+        # image = cv2.imread(results['image_path'])
+        det_results = self.fire_env_model(results['image_path'], conf=0.1, iou=0.5, agnostic_nms=True)[0]
+        xyxy = det_results.boxes.xyxy.detach().cpu().numpy().tolist()
+        conf = det_results.boxes.conf.detach().cpu().numpy().tolist()
+        cls_id = det_results.boxes.cls.detach().cpu().numpy().tolist()
+        class_name = [det_results.names[id] for id in cls_id]
+        results['xyxy'] = xyxy
+        results['class_name'] = class_name
+        results['confidence'] = conf
+        task_prompt = self.config['tasks']['fire']['prompt']
+        filter_results = self.detection_filter(results, task_prompt)
+        return filter_results    
+
     def post_fishing(self, results):
         # filter fishingrod without human
         
