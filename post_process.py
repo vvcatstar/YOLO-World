@@ -12,6 +12,7 @@ from supervision.draw.color import ColorPalette
 from flask import Flask, request, jsonify
 from ultralytics import YOLO
 import supervision as sv
+from supervision import box_non_max_suppression
 from IPython import embed
 
 CUSTOM_COLOR_MAP = [
@@ -137,9 +138,13 @@ class PostProcess:
         conf = det_results.boxes.conf.detach().cpu().numpy().tolist()
         cls_id = det_results.boxes.cls.detach().cpu().numpy().tolist()
         class_name = [det_results.names[id] for id in cls_id]
-        results['xyxy'] = xyxy
-        results['class_name'] = class_name
-        results['confidence'] = conf
+        for index in range(len(xyxy)):
+            results['xyxy'].append(xyxy[index])
+            results['class_name'].append(class_name[index])
+            results['confidence'].append(conf[index])
+        # results['xyxy'] = xyxy
+        # results['class_name'] = class_name
+        # results['confidence'] = conf
         task_prompt = self.config['tasks']['fire']['prompt']
         filter_results = self.detection_filter(results, task_prompt)
         return filter_results    
@@ -155,7 +160,12 @@ class PostProcess:
         input_boxes = results['xyxy']
         class_names = results['class_name']
         confidences = results['confidence']
-        return 
+        input_data = np.array([box + [confidence] for box, confidence in zip(input_boxes, confidences)])
+        keep_index = box_non_max_suppression(input_data, 0.7)
+        input_boxes = [box for box, keep in zip(input_boxes, keep_index) if keep]
+        confidences = [conf for conf, keep in zip(confidences, keep_index) if keep]
+        class_names = [cls for cls, keep in zip(class_names, keep_index) if keep]
+        return results
     
     def show_func(self, results):
         annotated_frame = cv2.imread(results['image_path'])
@@ -190,8 +200,8 @@ class PostProcess:
         post_func = self.post_func[task]
         if post_func:
             post_results = post_func(filter_results)
-        # nms_results = self.nms_func(post_results)
-        annotate_image = self.show_func(post_results)
+        nms_results = self.nms_func(post_results)
+        annotate_image = self.show_func(nms_results)
         return post_results, annotate_image
 
 # with open('./config.yaml', 'r') as f:
