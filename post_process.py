@@ -99,6 +99,7 @@ class PostProcess:
         return results 
     
     def post_smoke(self, results):
+        # use finetune detection model to fix FP
         image = cv2.imread(results['image_path'])
         input_boxes = results['xyxy']
         class_names = results['class_name']
@@ -109,10 +110,29 @@ class PostProcess:
                 x_min, y_min, x_max, y_max = map(int, bbox)
                 cropped_image = image[y_min:y_max, x_min:x_max]
                 cls_result = self.smoke_cls(cropped_image)[0]
+                # for top_key in cls_result.probs.top5:
+                #     if cls_result.names[top_key] in ['tree', 'fire']:
+                #         continue 
+                #     else:
+                #         cls_name = cls_result.names[top_key]
                 cls_name = cls_result.names[cls_result.probs.top1]
                 print(f'{class_names[index]}->{cls_name}')
                 class_names[index] = cls_name
                 confidences[index] = float(cls_result.probs.top1conf.detach().cpu())
+        # use finetune detection model to fix FN
+        det_results = self.fire_env_model(results['image_path'], conf=0.1, iou=0.5, agnostic_nms=True)[0]
+        xyxy = det_results.boxes.xyxy.detach().cpu().numpy().tolist()
+        conf = det_results.boxes.conf.detach().cpu().numpy().tolist()
+        cls_id = det_results.boxes.cls.detach().cpu().numpy().tolist()
+        class_name = [det_results.names[id] for id in cls_id]
+        for index, name in enumerate(class_name):
+            if name in ['billowing smoke', 'white smoke', 'fire']:
+                results['xyxy'].append(xyxy[index])
+                if name == 'billowing smoke':
+                    results['class_name'].append('billowing')
+                else:
+                    results['class_name'].append(name)
+                results['confidence'].append(conf[index])
         return results
     # def post_fire(self, results):
     #     image = cv2.imread(results['image_path'])
@@ -160,11 +180,12 @@ class PostProcess:
         input_boxes = results['xyxy']
         class_names = results['class_name']
         confidences = results['confidence']
-        input_data = np.array([box + [confidence] for box, confidence in zip(input_boxes, confidences)])
-        keep_index = box_non_max_suppression(input_data, 0.7)
-        input_boxes = [box for box, keep in zip(input_boxes, keep_index) if keep]
-        confidences = [conf for conf, keep in zip(confidences, keep_index) if keep]
-        class_names = [cls for cls, keep in zip(class_names, keep_index) if keep]
+        if len(input_boxes):
+            input_data = np.array([box + [confidence] for box, confidence in zip(input_boxes, confidences)])
+            keep_index = box_non_max_suppression(input_data, 0.3)
+            input_boxes = [box for box, keep in zip(input_boxes, keep_index) if keep]
+            confidences = [conf for conf, keep in zip(confidences, keep_index) if keep]
+            class_names = [cls for cls, keep in zip(class_names, keep_index) if keep]
         return results
     
     def show_func(self, results):
