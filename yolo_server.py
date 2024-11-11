@@ -178,7 +178,7 @@ class YOLO_WORLD:
         return [input_boxes, class_ids, class_names, confidences], text
         
         
-    def process_image(self, image_path, text_str, output_root, task, score_thr=0.05, show_result=False):
+    def process_image(self, image_path, text_str, output_root, task, score_thr=0.05, show_result=False, bboxInfos=[]):
         image_name = image_path.split('/')[-1].split('.')[0]
         # output_root = os.path.join(output_path, image_name)
         os.makedirs(output_root, exist_ok=True)
@@ -237,6 +237,22 @@ class YOLO_WORLD:
             'confidence': detections.confidence.tolist(),
             'class_name': class_names,
         }
+        if bboxInfos:
+            for bboxInfo in bboxInfos:
+                h, w = cv2.imread(image_path).shape[:2]
+                conf = bboxInfo['confidenceLevel']
+                point_list = bboxInfo['alarmPointList']
+                points = []
+                for point in point_list:
+                    points.append((point['percentX'], point['percentY']))
+                points = np.array(points)
+                y_min, y_max = np.min(points[:, 1]), np.max(points[:, 1])
+                x_min, x_max = np.min(points[:, 0]), np.max(points[:, 0])
+                anno_bbox = [x_min*w, y_min*h, x_max*w, y_max*h]
+                anno_label = bboxInfo['label']
+                outputs['class_name'].append(anno_label)
+                outputs['xyxy'] = np.vstack([outputs['xyxy'], anno_bbox])
+                outputs['confidence'].append(conf)
         # with open(output_result, 'w') as f:
         #     json.dump(outputs, f)
         return output_result, outputs
@@ -297,7 +313,8 @@ def yolo_detection():
     output_root = data.get('output_root', output_root)
     text_prompt = data.get('text_prompt', '.')
     score_thr = float(data.get('score_thr', 0.05))
-    output_file, outputs = yolo_det.process_image(image_path, text_prompt, output_root, task=task,score_thr=score_thr, show_result=True)
+    bboxInfos = data.get('bboxInfos', [])
+    output_file, outputs = yolo_det.process_image(image_path, text_prompt, output_root, task=task,score_thr=score_thr, show_result=True, bboxInfos=bboxInfos)
     outputs, annote_image = yolo_det.post_processer.post_task(task, outputs)
     with open(output_file, 'w') as f:
         json.dump(outputs, f)
