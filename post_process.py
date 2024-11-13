@@ -40,12 +40,15 @@ class PostProcess:
         self.fire_env_model = YOLO(config['post_config']['fire_det'])
         self.person_det = YOLO(config['post_config']['person_det'])
         self.person_det.set_classes(["person"])
+        self.gd_server = config['post_config']['gd_server']
         self.config = config 
         self.post_func = {
             'black_smoke': self.post_smoke,
             'fishing': self.post_fishing,
             'boat': self.post_boat,
-            'fire': self.post_fire,
+            'forest': self.post_fire,
+            'factory': self.post_fire,
+            'farmland': self.post_fire,
             'traffic': self.post_traffic,
         }
         self.label_annotator = sv.LabelAnnotator(color=ColorPalette.from_hex(CUSTOM_COLOR_MAP))
@@ -72,8 +75,26 @@ class PostProcess:
         input_boxes = results['xyxy']
         class_names = results['class_name']
         person_details = []
+        # det_results = self.fire_env_model(results['image_path'], conf=0.1, iou=0.5, agnostic_nms=True)[0]
+        # xyxy = det_results.boxes.xyxy.detach().cpu().numpy().tolist()
+        # conf = det_results.boxes.conf.detach().cpu().numpy().tolist()
+        # cls_id = det_results.boxes.cls.detach().cpu().numpy().tolist()
+        # class_name = [det_results.names[id] for id in cls_id]
+        # results['xyxy'] = xyxy 
+        # results['confidence'] = conf
+        # results['class_name'] = class_name
+        # input_boxes = results['xyxy']
+        # class_names = results['class_name']
+        # for index, name in enumerate(class_name):
+        #     if name in ['billowing smoke', 'white smoke', 'fire']:
+        #         results['xyxy'].append(xyxy[index])
+        #         if name == 'billowing smoke':
+        #             results['class_name'].append('billowing')
+        #         else:
+        #             results['class_name'].append(name)
+        #         results['confidence'].append(conf[index])
         for index in range(len(input_boxes)):
-            if class_names[index] in ['small rowboat', 'raft']:
+            if class_names[index] in ['small rowboat', 'raft', 'rowboat']:
                 bbox = input_boxes[index]
                 x_min, y_min, x_max, y_max = map(int, bbox)
                 width = x_max - x_min
@@ -110,11 +131,6 @@ class PostProcess:
                 x_min, y_min, x_max, y_max = map(int, bbox)
                 cropped_image = image[y_min:y_max, x_min:x_max]
                 cls_result = self.smoke_cls(cropped_image)[0]
-                # for top_key in cls_result.probs.top5:
-                #     if cls_result.names[top_key] in ['tree', 'fire']:
-                #         continue 
-                #     else:
-                #         cls_name = cls_result.names[top_key]
                 cls_name = cls_result.names[cls_result.probs.top1]
                 print(f'{class_names[index]}->{cls_name}')
                 class_names[index] = cls_name
@@ -162,10 +178,28 @@ class PostProcess:
             results['xyxy'].append(xyxy[index])
             results['class_name'].append(class_name[index])
             results['confidence'].append(conf[index])
+        text = 'forest.field.farmland.'
+        gd_inputs = {
+            'image_path': results['image_path'],
+            'text_prompt': text,
+        }
+        # try:
+        response = requests.post(self.gd_server, json=gd_inputs, headers={
+            "accept": "application/json",
+            "Content-Type": "application/json",
+        })
+        data = response.json()
+        for index in range(len(data['class_name'])):
+            results['xyxy'].append(data['xyxy'][index])
+            results['class_name'].append(data['class_name'][index])
+            results['confidence'].append(data['confidence'][index])
+        # except:
+        #     print('gd server error')
+        
         # results['xyxy'] = xyxy
         # results['class_name'] = class_name
         # results['confidence'] = conf
-        task_prompt = self.config['tasks']['fire']['prompt']
+        task_prompt = self.config['tasks']['forest']['prompt']
         filter_results = self.detection_filter(results, task_prompt)
         return filter_results    
 
@@ -178,14 +212,30 @@ class PostProcess:
         return results
     def nms_func(self, results):
         input_boxes = results['xyxy']
+        
         class_names = results['class_name']
         confidences = results['confidence']
-        if len(input_boxes):
-            input_data = np.array([box + [confidence] for box, confidence in zip(input_boxes, confidences)])
-            keep_index = box_non_max_suppression(input_data, 0.3)
-            input_boxes = [box for box, keep in zip(input_boxes, keep_index) if keep]
-            confidences = [conf for conf, keep in zip(confidences, keep_index) if keep]
-            class_names = [cls for cls, keep in zip(class_names, keep_index) if keep]
+        class_ids = np.array(list(range(len(class_names))))
+        detections = sv.Detections(
+            xyxy=np.array(input_boxes),  # (n, 4)
+            class_id=class_ids,
+            confidence=np.array(confidences),
+        )
+        detections = detections.with_nms(threshold=0.3, class_agnostic=True)
+        nms_class_ids = detections.class_id
+        nms_class_names = []
+        for id in nms_class_ids:
+            nms_class_names.append(class_names[id])
+        class_names = [class_names[i] for i in class_ids]
+        results['xyxy'] = detections.xyxy.tolist()
+        results['class_name'] = nms_class_names
+        results['confidence'] = detections.confidence.tolist()
+        # if len(input_boxes):
+        #     input_data = np.array([box + [confidence] for box, confidence in zip(input_boxes, confidences)])
+        #     keep_index = box_non_max_suppression(input_data, 0.3)
+        #     input_boxes = [box for box, keep in zip(input_boxes, keep_index) if keep]
+        #     confidences = [conf for conf, keep in zip(confidences, keep_index) if keep]
+        #     class_names = [cls for cls, keep in zip(class_names, keep_index) if keep]
         return results
     
     def show_func(self, results):
