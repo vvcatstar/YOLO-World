@@ -75,37 +75,18 @@ class PostProcess:
         input_boxes = results['xyxy']
         class_names = results['class_name']
         person_details = []
-        # det_results = self.fire_env_model(results['image_path'], conf=0.1, iou=0.5, agnostic_nms=True)[0]
-        # xyxy = det_results.boxes.xyxy.detach().cpu().numpy().tolist()
-        # conf = det_results.boxes.conf.detach().cpu().numpy().tolist()
-        # cls_id = det_results.boxes.cls.detach().cpu().numpy().tolist()
-        # class_name = [det_results.names[id] for id in cls_id]
-        # results['xyxy'] = xyxy 
-        # results['confidence'] = conf
-        # results['class_name'] = class_name
-        # input_boxes = results['xyxy']
-        # class_names = results['class_name']
-        # for index, name in enumerate(class_name):
-        #     if name in ['billowing smoke', 'white smoke', 'fire']:
-        #         results['xyxy'].append(xyxy[index])
-        #         if name == 'billowing smoke':
-        #             results['class_name'].append('billowing')
-        #         else:
-        #             results['class_name'].append(name)
-        #         results['confidence'].append(conf[index])
         for index in range(len(input_boxes)):
             if class_names[index] in ['small rowboat', 'raft', 'rowboat']:
                 bbox = input_boxes[index]
                 x_min, y_min, x_max, y_max = map(int, bbox)
                 width = x_max - x_min
                 height = y_max - y_min
-                new_x_min = max(x_min - width*2 , 0)
-                new_y_min = max(y_min - height*2 , 0)
-                new_x_max = min(x_max + width*2 , image.shape[1])
-                new_y_max = min(y_max + height*2 , image.shape[0])
+                new_x_min = max(x_min - width , 0)
+                new_y_min = max(y_min - height , 0)
+                new_x_max = min(x_max + width , image.shape[1])
+                new_y_max = min(y_max + height , image.shape[0])
                 cropped_image = image[new_y_min:new_y_max, new_x_min:new_x_max]
-                # cropped_image = image[y_min:y_max, x_min:x_max]
-                person_result = self.person_det(cropped_image)[0]
+                person_result = self.person_det(cropped_image, conf=0.1, iou=0.45)[0]
                 for j in range(len(person_result.boxes)):
                     p_x1 = float(person_result.boxes.xyxy[j][0].detach().cpu().numpy() + new_x_min)
                     p_y1 = float(person_result.boxes.xyxy[j][1].detach().cpu().numpy() + new_y_min)
@@ -150,22 +131,6 @@ class PostProcess:
                     results['class_name'].append(name)
                 results['confidence'].append(conf[index])
         return results
-    # def post_fire(self, results):
-    #     image = cv2.imread(results['image_path'])
-    #     input_boxes = results['xyxy']
-    #     class_names = results['class_name']
-    #     confidences = results['confidence']
-    #     for index in range(len(input_boxes)):
-    #         if class_names[index] in ['electricity tower', 'chimney']:
-    #             bbox = input_boxes[index]
-    #             x_min, y_min, x_max, y_max = map(int, bbox)
-    #             cropped_image = image[y_min:y_max, x_min:x_max]
-    #             cls_result = self.chimney_cls(cropped_image)[0]
-    #             cls_name = cls_result.names[cls_result.probs.top1]
-    #             print(f'{class_names[index]}->{cls_name}')
-    #             class_names[index] = cls_name
-    #             confidences[index] = float(cls_result.probs.top1conf.detach().cpu())
-    #     return results
     
     def post_fire(self, results):
         # image = cv2.imread(results['image_path'])
@@ -193,49 +158,36 @@ class PostProcess:
             results['xyxy'].append(data['xyxy'][index])
             results['class_name'].append(data['class_name'][index])
             results['confidence'].append(data['confidence'][index])
-        # except:
-        #     print('gd server error')
-        
-        # results['xyxy'] = xyxy
-        # results['class_name'] = class_name
-        # results['confidence'] = conf
         task_prompt = self.config['tasks']['forest']['prompt']
         filter_results = self.detection_filter(results, task_prompt)
         return filter_results    
 
     def post_fishing(self, results):
-        # filter fishingrod without human
-        
         return results
     
     def post_traffic(self, results):
         return results
+    
     def nms_func(self, results):
         input_boxes = results['xyxy']
-        
         class_names = results['class_name']
         confidences = results['confidence']
         class_ids = np.array(list(range(len(class_names))))
-        detections = sv.Detections(
-            xyxy=np.array(input_boxes),  # (n, 4)
-            class_id=class_ids,
-            confidence=np.array(confidences),
-        )
-        detections = detections.with_nms(threshold=0.3, class_agnostic=True)
-        nms_class_ids = detections.class_id
-        nms_class_names = []
-        for id in nms_class_ids:
-            nms_class_names.append(class_names[id])
-        class_names = [class_names[i] for i in class_ids]
-        results['xyxy'] = detections.xyxy.tolist()
-        results['class_name'] = nms_class_names
-        results['confidence'] = detections.confidence.tolist()
-        # if len(input_boxes):
-        #     input_data = np.array([box + [confidence] for box, confidence in zip(input_boxes, confidences)])
-        #     keep_index = box_non_max_suppression(input_data, 0.3)
-        #     input_boxes = [box for box, keep in zip(input_boxes, keep_index) if keep]
-        #     confidences = [conf for conf, keep in zip(confidences, keep_index) if keep]
-        #     class_names = [cls for cls, keep in zip(class_names, keep_index) if keep]
+        if len(class_names):
+            detections = sv.Detections(
+                xyxy=np.array(input_boxes),  # (n, 4)
+                class_id=class_ids,
+                confidence=np.array(confidences),
+            )
+            detections = detections.with_nms(threshold=0.7, class_agnostic=True)
+            nms_class_ids = detections.class_id
+            nms_class_names = []
+            for id in nms_class_ids:
+                nms_class_names.append(class_names[id])
+            class_names = [class_names[i] for i in class_ids]
+            results['xyxy'] = detections.xyxy.tolist()
+            results['class_name'] = nms_class_names
+            results['confidence'] = detections.confidence.tolist()
         return results
     
     def show_func(self, results):
