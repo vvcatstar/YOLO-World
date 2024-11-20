@@ -49,6 +49,7 @@ class PostProcess:
             'forest': self.post_fire,
             'factory': self.post_fire,
             'farmland': self.post_fire,
+            'fire': self.post_fire,
             'traffic': self.post_traffic,
         }
         self.label_annotator = sv.LabelAnnotator(color=ColorPalette.from_hex(CUSTOM_COLOR_MAP))
