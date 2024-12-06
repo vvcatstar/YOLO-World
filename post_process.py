@@ -35,11 +35,17 @@ CUSTOM_COLOR_MAP = [
 ]
 class PostProcess:
     def __init__(self, config):
-        self.smoke_cls = YOLO(config['post_config']['smoke_cls'])
-        # self.chimney_cls = YOLO('/home/zyw/data/china_tower/CV_server/YOLO-World/runs/classify/chimney/weights/best.pt')
-        self.fire_env_model = YOLO(config['post_config']['fire_det'])
-        self.person_det = YOLO(config['post_config']['person_det'])
-        self.person_det.set_classes(["person"])
+        self.onnx_model = config['onnx']
+        if self.onnx_model:
+            self.smoke_cls = YOLO(config['post_config']['smoke_cls_onnx'], task='classify')
+            self.fire_env_model = YOLO(config['post_config']['fire_det_onnx'], task='detect')
+            self.person_det = YOLO(config['post_config']['person_det_onnx'], task='detect')
+            # self.person_det.set_classes(["person"])
+        else:
+            self.smoke_cls = YOLO(config['post_config']['smoke_cls'])
+            self.fire_env_model = YOLO(config['post_config']['fire_det'])
+            self.person_det = YOLO(config['post_config']['person_det'])
+            self.person_det.set_classes(["person"])
         self.gd_server = config['post_config']['gd_server']
         self.config = config 
         self.post_func = {
@@ -102,7 +108,7 @@ class PostProcess:
         return results 
     
     def post_smoke(self, results):
-        # use finetune detection model to fix FP
+        # use finetune cls model to fix FP
         image = cv2.imread(results['image_path'])
         input_boxes = results['xyxy']
         class_names = results['class_name']
@@ -112,6 +118,8 @@ class PostProcess:
                 bbox = input_boxes[index]
                 x_min, y_min, x_max, y_max = map(int, bbox)
                 cropped_image = image[y_min:y_max, x_min:x_max]
+                # if self.onnx_model:
+                #     cropped_image = cv2.resize(cropped_image, (128, 128))
                 cls_result = self.smoke_cls(cropped_image)[0]
                 cls_name = cls_result.names[cls_result.probs.top1]
                 print(f'{class_names[index]}->{cls_name}')
@@ -180,7 +188,7 @@ class PostProcess:
                 class_id=class_ids,
                 confidence=np.array(confidences),
             )
-            detections = detections.with_nms(threshold=0.7, class_agnostic=True)
+            detections = detections.with_nms(threshold=0.5, class_agnostic=True)
             nms_class_ids = detections.class_id
             nms_class_names = []
             for id in nms_class_ids:

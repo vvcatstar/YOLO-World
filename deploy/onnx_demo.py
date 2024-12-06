@@ -8,7 +8,7 @@ import numpy as np
 import supervision as sv
 import onnxruntime as ort
 from mmengine.utils import ProgressBar
-
+from IPython import embed 
 try:
     import torch
     from torchvision.ops import nms
@@ -78,7 +78,7 @@ def preprocess(image, size=(640, 640)):
 def visualize(image, bboxes, labels, scores, texts):
     detections = sv.Detections(xyxy=bboxes, class_id=labels, confidence=scores)
     labels = [
-        f"{texts[class_id][0]} {confidence:0.2f}" for class_id, confidence in
+        f"{texts[class_id]} {confidence:0.2f}" for class_id, confidence in
         zip(detections.class_id, detections.confidence)
     ]
 
@@ -107,7 +107,6 @@ def inference(ort_session,
     labels = labels[0, :num_dets]
     scores = scores[0, :num_dets]
     bboxes = bboxes[0, :num_dets]
-
     bboxes -= np.array(
         [pad_param[1], pad_param[0], pad_param[1], pad_param[0]])
     bboxes /= scale_factor
@@ -126,7 +125,7 @@ def inference_with_postprocessing(ort_session,
                                   output_dir,
                                   size=(640, 640),
                                   nms_thr=0.7,
-                                  score_thr=0.3,
+                                  score_thr=0.04,
                                   max_dets=300):
     # export with `--without-nms`
     ori_image = cv2.imread(image_path)
@@ -174,10 +173,10 @@ def inference_with_postprocessing(ort_session,
     scores = scores.cpu().numpy()
     bboxes = bboxes.cpu().numpy()
     labels = labels.cpu().numpy()
-
+    bboxes /= scale_factor
     bboxes -= np.array(
         [pad_param[1], pad_param[0], pad_param[1], pad_param[0]])
-    bboxes /= scale_factor
+    # bboxes /= scale_factor
     bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, w)
     bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, h)
     bboxes = bboxes.round().astype('int')
@@ -207,15 +206,15 @@ def main():
         ]
     else:
         images = [args.image]
-
-    if args.text.endswith('.txt'):
-        with open(args.text) as f:
-            lines = f.readlines()
-        texts = [[t.rstrip('\r\n')] for t in lines]
-    elif args.text.endswith('.json'):
-        texts = json.load(open(args.text))
-    else:
-        texts = [[t.strip()] for t in args.text.split(',')]
+    texts = args.text.split('.')
+    # if args.text.endswith('.txt'):
+    #     with open(args.text) as f:
+    #         lines = f.readlines()
+    #     texts = [[t.rstrip('\r\n')] for t in lines]
+    # elif args.text.endswith('.json'):
+    #     texts = json.load(open(args.text))
+    # else:
+    #     texts = [[t.strip()] for t in args.text.split(',')]
 
     print("Start to inference.")
     progress_bar = ProgressBar(len(images))
@@ -226,6 +225,7 @@ def main():
         inference_func = inference_with_postprocessing
 
     for img in images:
+        # embed()
         inference_func(ort_session, img, texts, output_dir=output_dir)
         progress_bar.update()
     print("Finish inference")
