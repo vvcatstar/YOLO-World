@@ -1,18 +1,11 @@
 import requests
-import os 
-import json
-import yaml 
 import supervision as sv
 import numpy as np 
 import pandas as pd 
 import cv2
-import pickle
-import time 
-from supervision.draw.color import ColorPalette
-from flask import Flask, request, jsonify
-from ultralytics import YOLO
 import supervision as sv
-from supervision import box_non_max_suppression
+from supervision.draw.color import ColorPalette
+from ultralytics import YOLO
 from IPython import embed
 
 CUSTOM_COLOR_MAP = [
@@ -35,17 +28,10 @@ CUSTOM_COLOR_MAP = [
 ]
 class PostProcess:
     def __init__(self, config):
-        self.onnx_model = config['onnx']
-        if self.onnx_model:
-            self.smoke_cls = YOLO(config['post_config']['smoke_cls_onnx'], task='classify')
-            self.fire_env_model = YOLO(config['post_config']['fire_det_onnx'], task='detect')
-            self.person_det = YOLO(config['post_config']['person_det_onnx'], task='detect')
-            # self.person_det.set_classes(["person"])
-        else:
-            self.smoke_cls = YOLO(config['post_config']['smoke_cls'])
-            self.fire_env_model = YOLO(config['post_config']['fire_det'])
-            self.person_det = YOLO(config['post_config']['person_det'])
-            self.person_det.set_classes(["person"])
+        self.smoke_cls = YOLO(config['post_config']['smoke_cls'])
+        self.fire_env_model = YOLO(config['post_config']['fire_det'])
+        self.person_det = YOLO(config['post_config']['person_det'])
+        self.person_det.set_classes(["person"])
         self.gd_server = config['post_config']['gd_server']
         self.config = config 
         self.post_func = {
@@ -71,7 +57,7 @@ class PostProcess:
             'class_name': []
         }
         for i, class_name in enumerate(outputs['class_name']):
-            if class_name in filter_classes:
+            if class_name and class_name in filter_classes:
                 filtered_outputs['xyxy'].append(outputs['xyxy'][i])
                 filtered_outputs['confidence'].append(outputs['confidence'][i])
                 filtered_outputs['class_name'].append(class_name)
@@ -172,7 +158,26 @@ class PostProcess:
         return filter_results    
 
     def post_fishing(self, results):
-        return results
+        text = 'fishing rod.tree.person.'
+        gd_inputs = {
+            'image_path': results['image_path'],
+            'text_prompt': text,
+            'task': 'fishing',
+            'score_thr': 0.04,
+            'text_thr': 0.2,
+        }
+        response = requests.post(self.gd_server, json=gd_inputs, headers={
+            "accept": "application/json",
+            "Content-Type": "application/json",
+        })
+        data = response.json()
+        for index in range(len(data['class_name'])):
+            results['xyxy'].append(data['xyxy'][index])
+            results['class_name'].append(data['class_name'][index])
+            results['confidence'].append(data['confidence'][index])
+        task_prompt = self.config['tasks']['fishing']['prompt']
+        filter_results = self.detection_filter(results, task_prompt)
+        return filter_results
     
     def post_traffic(self, results):
         return results
@@ -205,7 +210,6 @@ class PostProcess:
         class_id_map = {name: idx for idx, name in enumerate(unique_classes)}
         class_ids = np.array([class_id_map[class_name] for class_name in results['class_name']])
 
-        # 将其他数据转换为 np.array
         input_boxes = np.array(results['xyxy'])
         if input_boxes.shape[0]:
             confidences = np.array(results['confidence'])
